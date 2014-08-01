@@ -213,12 +213,14 @@ MojErr ActivityManagerApp::open()
 			boost::make_shared<SystemManagerProxy>(&m_client, m_am);
 		m_requirementManager->AddManager(smp);
 
+#if 0
                if(read_modem_present())
                {
                    boost::shared_ptr<TelephonyProxy> tp =
                    boost::make_shared<TelephonyProxy>(&m_client);
                    m_requirementManager->AddManager(tp);
                }
+#endif
 #endif
 	} catch (...) {
 		return MojErrNoMem;
