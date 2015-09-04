@@ -111,11 +111,11 @@ MojErr BusEntity::ToJson(MojObject& rep, bool includeActivities) const
 
 	if (includeActivities) {
 		MojObject activities(MojObject::TypeArray);
+		boost::shared_ptr<const Activity> (ActivitySetAutoAssociation::*getActivityPtr) () const = &ActivitySetAutoAssociation::GetActivity;
 
 		std::for_each(m_associations.begin(), m_associations.end(),
 			boost::bind(&Activity::PushIdentityJson,
-				boost::bind<boost::shared_ptr<const Activity> >
-					(&ActivitySetAutoAssociation::GetActivity, _1),
+				boost::bind(getActivityPtr, _1),
 				boost::ref(activities)));
 
 		err = rep.put(_T("activities"), activities);

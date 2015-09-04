@@ -99,10 +99,10 @@ MojErr PowerManager::InfoToJson(MojObject& rep) const
 	if (!m_poweredActivities.empty()) {
 		MojObject poweredActivities(MojObject::TypeArray);
 
+		boost::shared_ptr<const Activity> (PowerActivity::*getActivityPtr) () const = &PowerActivity::GetActivity;
 		std::for_each(m_poweredActivities.begin(), m_poweredActivities.end(),
 			boost::bind(&Activity::PushIdentityJson,
-				boost::bind<boost::shared_ptr<const Activity> >
-					(&PowerActivity::GetActivity, _1),
+				boost::bind(getActivityPtr, _1),
 				boost::ref(poweredActivities)));
 
 		err = rep.put(_T("poweredActivities"), poweredActivities);
