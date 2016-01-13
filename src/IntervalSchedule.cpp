@@ -225,7 +225,7 @@ unsigned IntervalSchedule::StringToInterval(const char *intervalStr,
 		unsigned total = totalSecs/60;
 
 		static const unsigned allowed[] =
-			{ 5, 10, 15, 20, 30, 60, 180, 360, 720 };
+			{ 1, 5, 10, 15, 20, 30, 60, 180, 360, 720 };
 		static const int num_allowed = (sizeof(allowed)/sizeof(int));
 
 		int i;
@@ -242,7 +242,7 @@ unsigned IntervalSchedule::StringToInterval(const char *intervalStr,
 			return totalSecs;
 		} else {
 			throw std::runtime_error("Interval must be a number of days"
-				"<n>d, or one of: 12h, 6h, 3h, 1h, 20m, 30m, 15m, 10m or 5m");
+				"<n>d, or one of: 12h, 6h, 3h, 1h, 20m, 30m, 15m, 10m, 5m or 1m");
 		}
 	} else {
 		throw std::runtime_error("Failed to parse scheduling interval");
