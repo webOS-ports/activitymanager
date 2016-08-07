@@ -236,7 +236,36 @@ void ConnectionManagerProxy::ConnectionManagerUpdate(MojServiceMessage *msg,
 	response.get(_T("isInternetConnectionAvailable"),
 		isInternetConnectionAvailable);
 
-	bool updated = m_internetRequirementCore->SetCurrentValue(response);
+	// We need to pre-process a bit the raw information sent by connectionmanager,
+	// which doesn't fit legacy's format completely:
+	//  - "wan" is now called "cellular"
+	//  - there is a "wired" possible connection
+	MojObject internetObj;
+	MojObject wifiObj, cellularObj, wiredObj;
+	bool foundCellular = response.get(_T("cellular"), cellularObj);
+	bool foundWifi = response.get(_T("wifi"), wifiObj);
+	bool foundWired = response.get(_T("wired"), wiredObj);
+
+	internetObj.putBool(_T("isInternetConnectionAvailable"), isInternetConnectionAvailable);
+	if(foundCellular) {
+		internetObj.put(_T("wan"), cellularObj);
+	}
+	if(foundWifi || foundWired) {
+		MojString wifiConnected;
+		bool foundWifiState = false;
+		if(foundWifi) {
+			wifiObj.get(_T("state"), wifiConnected, foundWifiState);
+		}
+
+		if(foundWifi && (wifiConnected == "connected" || !foundWired)) {
+			internetObj.put(_T("wifi"), wifiObj);
+		}
+		else if(foundWired && wifiConnected != "connected")
+		{
+			internetObj.put(_T("wifi"), wiredObj);
+		}
+	}
+	bool updated = m_internetRequirementCore->SetCurrentValue(internetObj);
 
 	if (isInternetConnectionAvailable) {
 		if (!m_internetRequirementCore->IsMet()) {
@@ -283,6 +312,9 @@ MojErr ConnectionManagerProxy::UpdateWifiStatus(const MojObject& response)
 
 	MojObject wifi;
 	bool found = response.get(_T("wifi"), wifi);
+	// if there is a wired connection, show it as a wifi one
+	if(!found)
+		found = response.get(_T("wired"), wifi);
 	if (found) {
 		updated = m_wifiRequirementCore->SetCurrentValue(wifi);
 
@@ -346,6 +378,9 @@ MojErr ConnectionManagerProxy::UpdateWANStatus(const MojObject& response)
 
 	MojObject wan;
 	bool found = response.get(_T("wan"), wan);
+	// webos-connman-adapter now set a "cellular" property instead of "wan"
+	if(!found)
+		found = response.get(_T("cellular"), wan);
 	if (found) {
 		updated = m_wanRequirementCore->SetCurrentValue(wan);
 
