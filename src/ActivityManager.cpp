@@ -910,13 +910,12 @@ MojErr ActivityManager::InfoToJson(MojObject& rep) const
 
 	std::vector<boost::shared_ptr<const Activity> > leaked;
 
+	boost::shared_ptr<const Activity> (Activity::*shared_from_this_ptr) () const = &Activity::shared_from_this;
 	std::set_difference(
 		boost::make_transform_iterator(m_idTable.cbegin(),
-			boost::bind<boost::shared_ptr<const Activity> >
-				(&Activity::shared_from_this, _1)),
+			boost::bind(shared_from_this_ptr, _1)),
 		boost::make_transform_iterator(m_idTable.cend(),
-			boost::bind<boost::shared_ptr<const Activity> >
-				(&Activity::shared_from_this, _1)),
+			boost::bind(shared_from_this_ptr, _1)),
 		boost::make_transform_iterator(m_activities.begin(),
 			boost::bind(&ActivityMap::value_type::second, _1)),
 		boost::make_transform_iterator(m_activities.end(),
