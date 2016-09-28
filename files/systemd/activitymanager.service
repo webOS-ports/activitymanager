@@ -1,0 +1,12 @@
+[Unit]
+Description=webOS service to manage all running activities
+After=configurator.service
+Requires=configurator.service
+
+[Service]
+Type=simple
+Restart=on-failure
+ExecStart=/usr/sbin/activitymanager -c {\"log\":{\"appender\":{\"type\":\"syslog\"},\"levels\":{\"default\":\"warning\"}}}
+
+[Install]
+WantedBy=multi-user.target
