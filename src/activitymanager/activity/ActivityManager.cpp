@@ -97,6 +97,9 @@ void ActivityManager::unregisterActivityName(std::shared_ptr<Activity> act)
 std::shared_ptr<Activity> ActivityManager::getActivity(const std::string& name,
                                                        const BusId& creator)
 {
+    LOG_AM_TRACE("Entering function %s", __FUNCTION__);
+    LOG_AM_DEBUG("getActivity /\"%s\" for creator %s ...", name.c_str(), creator.getString().c_str());
+    
     ActivityNameTable::iterator iter;
 
     if (creator.getType() == BusAnon) {
