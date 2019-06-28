@@ -25,5 +25,6 @@ After=ls-hubd.service configurator-db8.service
 Type=notify
 OOMScoreAdjust=-500
 EnvironmentFile=-/var/systemd/system/env/activitymanager.env
-ExecStart=/usr/sbin/activitymanager -c {\"log\":{\"appender\":{\"type\":\"syslog\"},\"levels\":{\"default\":\"notice\"}}}
+ExecStart=/usr/sbin/activitymanager -c {\"log\":{\"appender\":{\"type\":\"syslog\"},\"levels\":{\"default\":\"debug\"}}}
+ExecStartPost=/usr/bin/PmLogCtl set ActivityManager debug
 Restart=on-failure
