@@ -8,7 +8,10 @@
     ],
     "permissions": [
         {
-            "service": "com.webos.service.activitymanager"
+            "service": "com.webos.service.activitymanager",
+            "outbound": [
+                "com.webos.service.power"
+            ]
         },
         {
             "service": "com.webos.service.activitymanager.client",
