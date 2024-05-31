@@ -28,7 +28,7 @@ webos_add_compiler_flags(ALL ${PBNJSON_CPP_CFLAGS_OTHER})
 set(BIN_NAME am-send)
 
 # Compiling
-webos_add_compiler_flags(ALL --std=c++11)
+webos_add_compiler_flags(ALL --std=c++17)
 file(GLOB_RECURSE SRC_FILES ${CMAKE_CURRENT_SOURCE_DIR}/*.cpp)
 file(GLOB_RECURSE SRC_COMMON ${PROJECT_SOURCE_DIR}/src/common/*.cpp)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR})

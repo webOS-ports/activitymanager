@@ -52,7 +52,7 @@ webos_add_compiler_flags(ALL ${PMLOG_CFLAGS_OTHER})
 include_directories(${CMAKE_CURRENT_SOURCE_DIR})
 include_directories(${PROJECT_SOURCE_DIR}/src/common)
 include_directories(${PROJECT_BINARY_DIR}/Configured/src/common)
-webos_add_compiler_flags(ALL -Wall -Wno-error=strict-aliasing -Wconversion -DMOJ_LINUX -DBOOST_SP_DISABLE_THREADS -DUSE_PMLOG -std=c++11)
+webos_add_compiler_flags(ALL -Wall -Wno-error=strict-aliasing -Wconversion -DMOJ_LINUX -DBOOST_SP_DISABLE_THREADS -DUSE_PMLOG -std=c++17)
 webos_add_compiler_flags(DEBUG -DMOJ_DEBUG)
 
 # MojoDb generates warnings in core/MojObject.h, so no -Werror
