@@ -26,9 +26,10 @@ webos_build_system_bus_files()
 webos_build_db8_files()
 
 if (WEBOS_CONFIG_BUILD_TESTS)
+    enable_testing()
     webos_use_gtest()
-    webos_add_compiler_flags(ALL -DUNITTEST)
-    add_subdirectory(unit_test)
+    # unit_test is added from src/activitymanager/CMakeLists.txt, once the
+    # activitymanager target and its compiler flags exist.
 endif()
 
 add_subdirectory(src/common)
