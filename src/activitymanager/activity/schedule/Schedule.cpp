@@ -35,6 +35,7 @@ Schedule::Schedule(std::shared_ptr<Activity> activity,
     : m_activity(activity)
     , m_start(start)
     , m_local(false)
+    , m_wake(true)
     , m_scheduled(false)
 {
 }
@@ -156,6 +157,16 @@ bool Schedule::isInterval() const
     return false;
 }
 
+void Schedule::setWake(bool wake)
+{
+    m_wake = wake;
+}
+
+bool Schedule::requiresWake() const
+{
+    return m_wake;
+}
+
 MojErr Schedule::toJson(MojObject& rep, unsigned long flags) const
 {
     MojErr err;
@@ -167,6 +178,11 @@ MojErr Schedule::toJson(MojObject& rep, unsigned long flags) const
 
     if (m_local) {
         err = rep.putBool(_T("local"), m_local);
+        MojErrCheck(err);
+    }
+
+    if (!m_wake) {
+        err = rep.putBool(_T("wake"), false);
         MojErrCheck(err);
     }
 

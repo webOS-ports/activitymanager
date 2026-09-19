@@ -37,6 +37,7 @@
             _T(" \"interval\": { \"type\": \"string\", \"optional\": true }, ") \
             _T(" \"skip\": { \"type\": \"boolean\", \"optional\": true }, ") \
             _T(" \"local\": { \"type\": \"boolean\", \"optional\": true }, ") \
+            _T(" \"wake\": { \"type\": \"boolean\", \"optional\": true }, ") \
             _T(" \"end\": { \"type\": \"string\", \"optional\": true }, ") \
             _T(" \"relative\": { \"type\": \"boolean\", \"optional\": true }, ") \
             _T(" \"lastFinished\": { \"type\": \"string\", \"optional\": true } ") \

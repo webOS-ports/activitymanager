@@ -62,6 +62,13 @@ public:
     void setLocal(bool local);
     bool isLocal() const;
 
+    /* Whether the device should be woken from suspend to honour this
+     * schedule.  Defaults to true (legacy webOS / webOS OSE behaviour).
+     * A schedule with wake=false simply runs the next time the device is
+     * awake at or after its start time. */
+    void setWake(bool wake);
+    bool requiresWake() const;
+
     virtual bool isInterval() const;
 
     virtual MojErr toJson(MojObject& rep, unsigned long flags) const;
@@ -87,6 +94,8 @@ protected:
     time_t m_start;
 
     bool m_local;
+
+    bool m_wake;
 
     bool m_scheduled;
 };
