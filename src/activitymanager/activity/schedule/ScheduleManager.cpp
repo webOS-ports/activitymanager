@@ -22,6 +22,8 @@
 
 const char *ScheduleManager::kPowerdWakeupKey =
         "com.webos.service.activitymanager.wakeup";
+const char *ScheduleManager::kPowerdTimerKey =
+        "com.webos.service.activitymanager.timer";
 
 ScheduleManager::ScheduleManager()
 {
@@ -47,7 +49,17 @@ void ScheduleManager::enable()
     monitorSystemTime();
 }
 
-void ScheduleManager::updateTimeout(time_t nextWakeup, time_t curTime)
+const char *ScheduleManager::timeoutKey(bool wake)
+{
+    return wake ? kPowerdWakeupKey : kPowerdTimerKey;
+}
+
+std::shared_ptr<LunaCall>& ScheduleManager::timeoutCall(bool wake)
+{
+    return wake ? m_wakeupCall : m_timerCall;
+}
+
+void ScheduleManager::updateTimeout(time_t nextWakeup, time_t curTime, bool wake)
 {
     MojObject params;
     MojErr err;
@@ -55,18 +67,22 @@ void ScheduleManager::updateTimeout(time_t nextWakeup, time_t curTime)
     char formattedTime[32];
 
     LOG_AM_TRACE("Entering function %s", __FUNCTION__);
-    LOG_AM_DEBUG("Updating powerd scheduling callback - nextWakeup %llu, current time %llu",
+    LOG_AM_DEBUG("Updating powerd scheduling callback (%s) - nextWakeup %llu, current time %llu",
+                 wake ? "wakeup" : "timer",
                  (unsigned long long )nextWakeup, (unsigned long long )curTime);
 
     formatWakeupTime(nextWakeup, formattedTime, sizeof(formattedTime));
 
-    err = params.putBool("wakeup", true);
+    /* wakeup=true arms the RTC; wakeup=false is a plain sleepd timer that
+     * fires when the device is awake, or on the next resume if it expired
+     * while suspended. */
+    err = params.putBool("wakeup", wake);
     MojErrAccumulate(errs, err);
 
     err = params.putString(_T("at"), formattedTime);
     MojErrAccumulate(errs, err);
 
-    err = params.putString(_T("key"), kPowerdWakeupKey);
+    err = params.putString(_T("key"), timeoutKey(wake));
     MojErrAccumulate(errs, err);
 
     err = params.putString(_T("uri"),
@@ -83,22 +99,24 @@ void ScheduleManager::updateTimeout(time_t nextWakeup, time_t curTime)
         throw std::runtime_error("Error constructing parameters for powerd set timeout call");
     }
 
-    m_call = std::make_shared<LunaPtrCall<ScheduleManager>>(
+    std::shared_ptr<LunaCall>& call = timeoutCall(wake);
+    call = std::make_shared<LunaPtrCall<ScheduleManager>>(
             this,
-            &ScheduleManager::handleTimeoutSetResponse,
+            wake ? &ScheduleManager::handleWakeupSetResponse
+                 : &ScheduleManager::handleTimerSetResponse,
             true,
             "luna://com.webos.service.sleep/timeout/set",
             params);
-    m_call->call();
+    call->call();
 }
 
-void ScheduleManager::cancelTimeout()
+void ScheduleManager::cancelTimeout(bool wake)
 {
     MojObject params;
-    MojErr err = params.putString(_T("key"), kPowerdWakeupKey);
+    MojErr err = params.putString(_T("key"), timeoutKey(wake));
 
     LOG_AM_TRACE("Entering function %s", __FUNCTION__);
-    LOG_AM_DEBUG("Cancelling powerd timeout");
+    LOG_AM_DEBUG("Cancelling powerd timeout (%s)", wake ? "wakeup" : "timer");
 
     if (err) {
         LOG_AM_ERROR(MSGID_CLEAR_TIMEOUT_PARAM_ERR, 0,
@@ -106,13 +124,15 @@ void ScheduleManager::cancelTimeout()
         throw std::runtime_error("Error constructing parameters for powerd clear timeout call");
     }
 
-    m_call = std::make_shared<LunaPtrCall<ScheduleManager>>(
+    std::shared_ptr<LunaCall>& call = timeoutCall(wake);
+    call = std::make_shared<LunaPtrCall<ScheduleManager>>(
             this,
-            &ScheduleManager::handleTimeoutClearResponse,
+            wake ? &ScheduleManager::handleWakeupClearResponse
+                 : &ScheduleManager::handleTimerClearResponse,
             true,
             "luna://com.webos.service.sleep/timeout/clear",
             params);
-    m_call->call();
+    call->call();
 }
 
 void ScheduleManager::monitorSystemTime()
@@ -150,7 +170,36 @@ size_t ScheduleManager::formatWakeupTime(time_t wake, char *at, size_t len) cons
     return strftime(at, len, "%m/%d/%Y %H:%M:%S", &tm);
 }
 
-void ScheduleManager::handleTimeoutSetResponse(MojServiceMessage *msg,
+void ScheduleManager::handleWakeupSetResponse(MojServiceMessage *msg,
+                                              const MojObject& response,
+                                              MojErr err)
+{
+    handleTimeoutSetResponse(m_wakeupCall, msg, response, err);
+}
+
+void ScheduleManager::handleTimerSetResponse(MojServiceMessage *msg,
+                                             const MojObject& response,
+                                             MojErr err)
+{
+    handleTimeoutSetResponse(m_timerCall, msg, response, err);
+}
+
+void ScheduleManager::handleWakeupClearResponse(MojServiceMessage *msg,
+                                                const MojObject& response,
+                                                MojErr err)
+{
+    handleTimeoutClearResponse(m_wakeupCall, msg, response, err);
+}
+
+void ScheduleManager::handleTimerClearResponse(MojServiceMessage *msg,
+                                               const MojObject& response,
+                                               MojErr err)
+{
+    handleTimeoutClearResponse(m_timerCall, msg, response, err);
+}
+
+void ScheduleManager::handleTimeoutSetResponse(std::shared_ptr<LunaCall>& call,
+                                               MojServiceMessage *msg,
                                                const MojObject& response,
                                                MojErr err)
 {
@@ -166,17 +215,18 @@ void ScheduleManager::handleTimeoutSetResponse(MojServiceMessage *msg,
             LOG_AM_WARNING(MSGID_SCH_WAKEUP_REG_RETRY, 0,
                            "Failed to register scheduled wakeup, retrying: %s",
                            MojoObjectJson(response).c_str());
-            m_call->call();
+            call->call();
             return;
         }
     } else {
         LOG_AM_DEBUG("Successfully registered scheduled wakeup");
     }
 
-    m_call.reset();
+    call.reset();
 }
 
-void ScheduleManager::handleTimeoutClearResponse(MojServiceMessage *msg,
+void ScheduleManager::handleTimeoutClearResponse(std::shared_ptr<LunaCall>& call,
+                                                 MojServiceMessage *msg,
                                                  const MojObject& response,
                                                  MojErr err)
 {
@@ -192,14 +242,14 @@ void ScheduleManager::handleTimeoutClearResponse(MojServiceMessage *msg,
             LOG_AM_WARNING(MSGID_SCH_WAKEUP_CANCEL_RETRY, 0,
                            "Failed to cancel scheduled wakeup, retrying: %s",
                            MojoObjectJson(response).c_str());
-            m_call->call();
+            call->call();
             return;
         }
     } else {
         LOG_AM_DEBUG("Successfully cancelled scheduled wakeup");
     }
 
-    m_call.reset();
+    call.reset();
 }
 
 void ScheduleManager::handleSystemTimeResponse(MojServiceMessage *msg,

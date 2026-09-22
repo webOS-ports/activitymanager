@@ -77,3 +77,7 @@ set(LIBS ${DB8_LDFLAGS}
 target_link_libraries(activitymanager ${LIBS})
 
 webos_build_daemon()
+
+if (WEBOS_CONFIG_BUILD_TESTS)
+    add_subdirectory(${PROJECT_SOURCE_DIR}/unit_test ${CMAKE_BINARY_DIR}/unit_test)
+endif()

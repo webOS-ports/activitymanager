@@ -604,6 +604,15 @@ std::shared_ptr<Schedule> ActivityExtractor::createSchedule(
         schedule->setLocal(local);
     }
 
+    /* "wake": false lets a periodic maintenance job (db purge, space
+     * check, ...) run whenever the device happens to be awake instead of
+     * pulling the whole SoC out of suspend for it. */
+    bool wake;
+    found = spec.get(_T("wake"), wake);
+    if (found) {
+        schedule->setWake(wake);
+    }
+
     return schedule;
 }
 

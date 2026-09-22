@@ -39,8 +39,11 @@ public:
     virtual void enable() = 0;
 
 protected:
-    virtual void updateTimeout(time_t nextWakeup, time_t curTime) = 0;
-    virtual void cancelTimeout() = 0;
+    /* Arm (or re-arm) the timeout for the given class of schedules.
+     * wake=true: the device must be woken from suspend at nextWakeup.
+     * wake=false: fire at nextWakeup if awake, otherwise on next resume. */
+    virtual void updateTimeout(time_t nextWakeup, time_t curTime, bool wake) = 0;
+    virtual void cancelTimeout(bool wake) = 0;
 
     typedef boost::intrusive::member_hook<Schedule, Schedule::QueueItem,
             &Schedule::m_queueItem> ScheduleQueueOption;
@@ -55,7 +58,11 @@ protected:
 
     void timeChanged();
 
-    time_t getNextStartTime() const;
+    /* Earliest absolute start time of the queued schedules whose
+     * requiresWake() equals 'wake'.  Returns false if there is none. */
+    bool getNextStartTime(bool wake, time_t& next) const;
+    bool isClassHead(const ScheduleQueue& queue, const Schedule& item) const;
+    void updateTimeoutForClass(bool wake, time_t curTime);
 
     static MojLogger s_log;
 
@@ -64,8 +71,10 @@ protected:
     ScheduleQueue m_queue;
     ScheduleQueue m_localQueue;
 
-    time_t m_nextWakeup;
-    bool m_wakeScheduled;
+    /* One sleepd timeout per class: [1] = wake schedules (RTC alarm),
+     * [0] = no-wake schedules (plain timer, fires on resume if missed). */
+    time_t m_nextWakeup[2];
+    bool m_wakeScheduled[2];
 
     bool m_localOffsetSet;
     off_t m_localOffset;

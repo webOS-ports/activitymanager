@@ -24,11 +24,12 @@
 MojLogger AbstractScheduleManager::s_log(_T("activitymanager.scheduler"));
 
 AbstractScheduleManager::AbstractScheduleManager()
-        : m_nextWakeup(0)
-        , m_wakeScheduled(false)
-        , m_localOffsetSet(false)
+        : m_localOffsetSet(false)
         , m_localOffset(0)
 {
+    m_nextWakeup[0] = m_nextWakeup[1] = 0;
+    m_wakeScheduled[0] = m_wakeScheduled[1] = false;
+
     /* Calculate a random base start time between 11pm and 5am so all
      * the devices don't cause a storm of syncs if their midnights are
      * aligned.  (Generally, local time should be used for that sort of thing,
@@ -58,21 +59,31 @@ void AbstractScheduleManager::addItem(std::shared_ptr<Schedule> item)
 
     if (item->isLocal()) {
         m_localQueue.insert(*item);
-
-        if (m_localQueue.iterator_to(*item) == m_localQueue.begin()) {
-            updateWake = true;
-        }
+        updateWake = isClassHead(m_localQueue, *item);
     } else {
         m_queue.insert(*item);
-
-        if (m_queue.iterator_to(*item) == m_queue.begin()) {
-            updateWake = true;
-        }
+        updateWake = isClassHead(m_queue, *item);
     }
 
     if (updateWake) {
         g_timeout_add(0, dequeueAndUpdateTimeout, this);
     }
+}
+
+/* True if no earlier item of the same wake class precedes 'item' in
+ * 'queue', i.e. adding/removing it may move that class' timeout. */
+bool AbstractScheduleManager::isClassHead(const ScheduleQueue& queue,
+                                          const Schedule& item) const
+{
+    for (ScheduleQueue::const_iterator it = queue.begin(); it != queue.end(); ++it) {
+        if (&(*it) == &item) {
+            return true;
+        }
+        if (it->requiresWake() == item.requiresWake()) {
+            return false;
+        }
+    }
+    return false;
 }
 
 void AbstractScheduleManager::removeItem(std::shared_ptr<Schedule> item)
@@ -88,16 +99,13 @@ void AbstractScheduleManager::removeItem(std::shared_ptr<Schedule> item)
          * container. */
         if (item->m_queueItem.is_linked()) {
 
-            /* If the item is at the head of either queue, the time might
-             * have changed.  Otherwise, it definitely didn't. */
+            /* If the item is at the head of its wake class in either queue,
+             * that class' time might have changed.  Otherwise, it
+             * definitely didn't. */
             if (item->isLocal()) {
-                if (m_localQueue.iterator_to(*item) == m_localQueue.begin()) {
-                    updateWake = true;
-                }
+                updateWake = isClassHead(m_localQueue, *item);
             } else {
-                if (m_queue.iterator_to(*item) == m_queue.begin()) {
-                    updateWake = true;
-                }
+                updateWake = isClassHead(m_queue, *item);
             }
 
             item->m_queueItem.unlink();
@@ -191,7 +199,10 @@ void AbstractScheduleManager::wake()
     LOG_AM_TRACE("Entering function %s", __FUNCTION__);
     LOG_AM_DEBUG("Wake callback");
 
-    m_wakeScheduled = false;
+    /* sleepd does not tell us which of our two timeouts fired and it has
+     * dropped that one, so re-arm both unconditionally. */
+    m_wakeScheduled[0] = false;
+    m_wakeScheduled[1] = false;
 
     dequeueAndUpdateTimeout();
 }
@@ -216,9 +227,11 @@ void AbstractScheduleManager::dequeueAndUpdateTimeout()
      * the next time something is queued */
     if (m_queue.empty() && (!m_localOffsetSet || m_localQueue.empty())) {
         LOG_AM_DEBUG("Not dequeuing any items as queue is now empty");
-        if (m_wakeScheduled) {
-            cancelTimeout();
-            m_wakeScheduled = false;
+        for (int wake = 0; wake < 2; wake++) {
+            if (m_wakeScheduled[wake]) {
+                cancelTimeout(wake != 0);
+                m_wakeScheduled[wake] = false;
+            }
         }
         return;
     }
@@ -240,25 +253,32 @@ void AbstractScheduleManager::dequeueAndUpdateTimeout()
 
     LOG_AM_DEBUG("Done dequeuing items");
 
-    /* Both queues scheduled and dequeued (or unknown if time zone is not
-     * yet known)? */
-    if (m_queue.empty() && (!m_localOffsetSet || m_localQueue.empty())) {
-        LOG_AM_DEBUG("No unscheduled items remain");
+    /* Arm the RTC wakeup only for schedules that asked for it; everything
+     * else gets a plain timer that fires when the device is awake anyway. */
+    updateTimeoutForClass(true, curTime);
+    updateTimeoutForClass(false, curTime);
+}
 
-        if (m_wakeScheduled) {
-            cancelTimeout();
-            m_wakeScheduled = false;
+void AbstractScheduleManager::updateTimeoutForClass(bool wake, time_t curTime)
+{
+    const int idx = wake ? 1 : 0;
+    time_t next;
+
+    if (!getNextStartTime(wake, next)) {
+        LOG_AM_DEBUG("No unscheduled %s items remain", wake ? "wake" : "no-wake");
+
+        if (m_wakeScheduled[idx]) {
+            cancelTimeout(wake);
+            m_wakeScheduled[idx] = false;
         }
 
         return;
     }
 
-    time_t nextWakeup = getNextStartTime();
-
-    if (!m_wakeScheduled || (nextWakeup != m_nextWakeup)) {
-        updateTimeout(nextWakeup, curTime);
-        m_nextWakeup = nextWakeup;
-        m_wakeScheduled = true;
+    if (!m_wakeScheduled[idx] || (next != m_nextWakeup[idx])) {
+        updateTimeout(next, curTime, wake);
+        m_nextWakeup[idx] = next;
+        m_wakeScheduled[idx] = true;
     }
 }
 
@@ -306,32 +326,35 @@ void AbstractScheduleManager::timeChanged()
     dequeueAndUpdateTimeout();
 }
 
-time_t AbstractScheduleManager::getNextStartTime() const
+bool AbstractScheduleManager::getNextStartTime(bool wake, time_t& next) const
 {
-    if (m_queue.empty()) {
-        if (!m_localOffsetSet || m_localQueue.empty()) {
-            throw std::runtime_error("No available items in queue");
-        } else {
-            const Schedule& localItem = *(m_localQueue.begin());
-            return (localItem.getNextStartTime() - m_localOffset);
+    bool found = false;
+
+    /* Queues are sorted by start time, so the first item of the requested
+     * class is that class' earliest. */
+    for (ScheduleQueue::const_iterator it = m_queue.begin(); it != m_queue.end(); ++it) {
+        if (it->requiresWake() == wake) {
+            next = it->getNextStartTime();
+            found = true;
+            break;
         }
-    } else {
-        if (!m_localOffsetSet || m_localQueue.empty()) {
-            const Schedule& item = *(m_queue.begin());
-            return item.getNextStartTime();
-        } else {
-            const Schedule& localItem = *(m_localQueue.begin());
-            time_t nextLocalStartTime = (localItem.getNextStartTime() - m_localOffset);
+    }
 
-            const Schedule& item = *(m_queue.begin());
-            time_t nextStartTime = item.getNextStartTime();
-
-            if (nextStartTime < nextLocalStartTime) {
-                return nextStartTime;
-            } else {
-                return nextLocalStartTime;
+    /* Only consider the local queue if the timezone offset is known.
+     * Otherwise, wait, because it will be known shortly. */
+    if (m_localOffsetSet) {
+        for (ScheduleQueue::const_iterator it = m_localQueue.begin(); it != m_localQueue.end(); ++it) {
+            if (it->requiresWake() == wake) {
+                time_t nextLocal = it->getNextStartTime() - m_localOffset;
+                if (!found || (nextLocal < next)) {
+                    next = nextLocal;
+                    found = true;
+                }
+                break;
             }
         }
     }
+
+    return found;
 }
 
