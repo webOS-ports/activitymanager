@@ -48,6 +48,10 @@ public:
     virtual void confirmPowerActivityBegin(std::shared_ptr<Activity> activity);
     virtual void confirmPowerActivityEnd(std::shared_ptr<Activity> activity);
 
+    /* For an Activity that is destroyed (cancelled, stopped or replaced)
+     * instead of ending normally: drops its lock without waiting. */
+    virtual void releasePowerActivity(std::shared_ptr<Activity> activity);
+
     MojErr infoToJson(MojObject& rep) const;
 
 private:

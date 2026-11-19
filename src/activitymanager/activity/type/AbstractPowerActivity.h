@@ -41,6 +41,11 @@ public:
     virtual void begin() = 0;
     virtual void end() = 0;
 
+    /* Drops the lock of an Activity that is going away, for instance
+     * because it was cancelled or replaced while running. Unlike end(), it
+     * does not tell the Activity when the lock is gone. */
+    virtual void release() = 0;
+
     std::shared_ptr<Activity> getActivity();
     std::shared_ptr<const Activity> getActivity() const;
 
@@ -63,6 +68,7 @@ public:
 
     virtual void begin();
     virtual void end();
+    virtual void release();
 
 protected:
     PowerState m_state;

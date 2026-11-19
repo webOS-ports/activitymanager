@@ -82,3 +82,9 @@ void NoopPowerActivity::end()
     }
 }
 
+void NoopPowerActivity::release()
+{
+    LOG_AM_TRACE("Entering function %s", __FUNCTION__);
+    m_state = kPowerUnlocked;
+}
+
