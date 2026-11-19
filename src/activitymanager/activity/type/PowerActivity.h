@@ -32,6 +32,7 @@ public:
 
     virtual void begin();
     virtual void end();
+    virtual void release();
 
     unsigned long getSerial() const;
 
@@ -40,13 +41,15 @@ protected:
     void powerUnlockedNotification(MojServiceMessage *msg, const MojObject& response, MojErr err, bool debounce);
     void powerUnlockedNotificationNormal(MojServiceMessage *msg, const MojObject& response, MojErr err);
     void powerUnlockedNotificationDebounce(MojServiceMessage *msg, const MojObject& response, MojErr err);
+    void powerReleasedNotification(MojServiceMessage *msg, const MojObject& response, MojErr err);
 
     void timeoutNotification();
 
     std::string getRemotePowerActivityName() const;
 
-    MojErr createRemotePowerActivity(bool debounce = false);
-    MojErr removeRemotePowerActivity();
+    /* Virtual so the unit tests can record these calls instead of using the bus. */
+    virtual MojErr createRemotePowerActivity(bool debounce = false);
+    virtual MojErr removeRemotePowerActivity(bool notifyActivity = true);
 
     static const int kPowerActivityLockDuration; /* 300 */
     static const int kPowerActivityLockUpdateInterval; /* 240 */

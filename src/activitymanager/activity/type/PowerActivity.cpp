@@ -89,6 +89,42 @@ void PowerActivity::begin()
     }
 }
 
+void PowerActivity::release()
+{
+    LOG_AM_TRACE("Entering function %s", __FUNCTION__);
+
+    /* Never locked, or an unlock is already on its way. */
+    if (m_targetState == kPowerUnlocked) {
+        return;
+    }
+
+    auto activity_ptr = m_activity.lock();
+    if (!activity_ptr) {
+        return;
+    }
+    LOG_AM_DEBUG("[Activity %llu] Releasing power lock of an Activity that is going away",
+                 activity_ptr->getId());
+
+    if (m_timeout) {
+        m_timeout.reset();
+    }
+
+    /* A lock request still in flight reaches the sleep service before the
+     * removal sent below, so dropping its reply is enough. */
+    if (m_call) {
+        m_call.reset();
+    }
+
+    m_targetState = kPowerUnlocked;
+    m_currentState = kPowerUnlocked;
+
+    if (removeRemotePowerActivity(false)) {
+        LOG_AM_ERROR(MSGID_PWR_UNLOCK_CREATE_FAIL, 1,
+                     PMLOGKFV("Activity", "%llu", activity_ptr->getId()),
+                     "Failed to issue command to release power lock; it expires on its own");
+    }
+}
+
 void PowerActivity::end()
 {
     LOG_AM_TRACE("Entering function %s", __FUNCTION__);
@@ -308,6 +344,24 @@ void PowerActivity::powerUnlockedNotificationDebounce(MojServiceMessage *msg,
     powerUnlockedNotification(msg, response, err, true);
 }
 
+void PowerActivity::powerReleasedNotification(MojServiceMessage *msg,
+                                              const MojObject& response,
+                                              MojErr err)
+{
+    LOG_AM_TRACE("Entering function %s", __FUNCTION__);
+
+    /* The Activity is gone: nothing waits for this answer. If the removal
+     * failed, the lock still expires on its own. */
+    if (err != MojErrNone) {
+        LOG_AM_WARNING(MSGID_PWRULK_NOTI_ERR, 1,
+                       PMLOGKFV("serial", "%lu", m_serial),
+                       "Attempt to release power lock failed. Error: %s",
+                       MojoObjectJson(response).c_str());
+    }
+
+    m_call.reset();
+}
+
 void PowerActivity::timeoutNotification()
 {
     LOG_AM_TRACE("Entering function %s", __FUNCTION__);
@@ -365,7 +419,7 @@ MojErr PowerActivity::createRemotePowerActivity(bool debounce)
     return MojErrNone;
 }
 
-MojErr PowerActivity::removeRemotePowerActivity()
+MojErr PowerActivity::removeRemotePowerActivity(bool notifyActivity)
 {
     LOG_AM_TRACE("Entering function %s", __FUNCTION__);
 
@@ -377,7 +431,7 @@ MojErr PowerActivity::removeRemotePowerActivity()
 
     m_call = std::make_shared<LunaWeakPtrCall<PowerActivity>>(
             std::dynamic_pointer_cast<PowerActivity, AbstractPowerActivity>(shared_from_this()),
-            &PowerActivity::powerUnlockedNotificationNormal,
+            (notifyActivity ? &PowerActivity::powerUnlockedNotificationNormal : &PowerActivity::powerReleasedNotification),
             true,
             "luna://com.webos.service.sleep/com/palm/power/activityEnd",
             params);

@@ -16,6 +16,7 @@
 
 #include "activity/Activity.h"
 #include "activity/ActivityManager.h"
+#include "activity/type/PowerManager.h"
 #include "conf/ActivityTypes.h"
 #include "conf/Config.h"
 #include "tools/ActivityMonitor.h"
@@ -430,6 +431,12 @@ void ActivityStateDestroyed::enter(std::shared_ptr<Activity> activity)
 {
     activity->m_ending = true; // TODO: need to check
     activity->unscheduleActivity();
+    /* A running Activity that is cancelled or replaced never passes through
+     * endActivity(), so its power lock would stay until it expires (15
+     * minutes) and keep the device awake. */
+    if (activity->isPowerActivity()) {
+        PowerManager::getInstance().releasePowerActivity(activity);
+    }
     ActivityManager::getInstance().informActivityEnd(activity);
     ActivityManager::getInstance().releaseActivity(activity);
 }

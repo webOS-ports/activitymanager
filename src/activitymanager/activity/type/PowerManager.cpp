@@ -83,6 +83,25 @@ void PowerManager::confirmPowerActivityEnd(std::shared_ptr<Activity> activity)
     }
 }
 
+void PowerManager::releasePowerActivity(std::shared_ptr<Activity> activity)
+{
+    LOG_AM_TRACE("Entering function %s", __FUNCTION__);
+
+    std::shared_ptr<AbstractPowerActivity> powerActivity = activity->getPowerActivity();
+    if (!powerActivity) {
+        return;
+    }
+
+    LOG_AM_DEBUG("Activity %lu going away, releasing its power activity",
+                 (unsigned long )activity->getId());
+
+    powerActivity->release();
+
+    if (powerActivity->m_listItem.is_linked()) {
+        powerActivity->m_listItem.unlink();
+    }
+}
+
 MojErr PowerManager::infoToJson(MojObject& rep) const
 {
     LOG_AM_TRACE("Entering function %s", __FUNCTION__);
