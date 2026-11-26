@@ -327,6 +327,13 @@ void ActivityStateExpired::complete(std::shared_ptr<Activity> activity)
             activity->setState(ActivityStateDestroyed::newInstance());
         }
     } else {
+        /* Completing with restart does not pass through endActivity(), so
+         * this run's power lock would stay until it expires (15 minutes).
+         * The Activity would also still count it as held, and every later
+         * run would go without a lock. */
+        if (activity->isPowerActivity()) {
+            PowerManager::getInstance().requestEndPowerActivity(activity);
+        }
         if (activity->isFastRestart()) {
             setTransition(kActivityTransitionFailing, activity);
             activity->setState(ActivityStateFailed::newInstance());

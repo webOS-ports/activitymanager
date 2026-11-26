@@ -41,7 +41,11 @@ void PowerManager::requestBeginPowerActivity(std::shared_ptr<Activity> activity)
     std::shared_ptr<AbstractPowerActivity> powerActivity = activity->getPowerActivity();
 
     if (powerActivity->getPowerState() != AbstractPowerActivity::kPowerLocked) {
-        m_poweredActivities.push_back(*powerActivity);
+        /* Still listed when it runs again before the unlock of its last run
+         * was confirmed. */
+        if (!powerActivity->m_listItem.is_linked()) {
+            m_poweredActivities.push_back(*powerActivity);
+        }
         powerActivity->begin();
     } else {
         activity->powerLockedNotification();

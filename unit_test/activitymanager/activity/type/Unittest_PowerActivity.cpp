@@ -161,3 +161,50 @@ TEST_F(PowerActivityRelease, destroyingARunningActivityDropsItsLock)
     EXPECT_EQ("end silently", power->sent[0]);
     EXPECT_EQ(AbstractPowerActivity::kPowerUnlocked, power->getPowerState());
 }
+
+/*
+ * Completing with restart sends the Activity back to wait for its trigger
+ * without endActivity(). Its lock must be ended there too, or it is held for
+ * the full 15 minutes and the runs after it go without one.
+ */
+
+TEST_F(PowerActivityRelease, completingWithRestartEndsTheLock)
+{
+    power->markLocked();
+
+    ActivityStateExpired::newInstance()->complete(activity);
+
+    ASSERT_EQ(1u, power->sent.size());
+    EXPECT_EQ("end", power->sent[0]);
+    EXPECT_NE(AbstractPowerActivity::kPowerLocked, power->getPowerState());
+}
+
+TEST_F(PowerActivityRelease, completingWithRestartDebouncesWhenAsked)
+{
+    activity->setPowerDebounce(true);
+    power->markLocked();
+
+    ActivityStateExpired::newInstance()->complete(activity);
+
+    ASSERT_EQ(1u, power->sent.size());
+    EXPECT_EQ("start debounce", power->sent[0]);
+}
+
+TEST_F(PowerActivityRelease, theNextRunLocksAgain)
+{
+    PowerManager::getInstance().requestBeginPowerActivity(activity);
+    power->markLocked();
+    ActivityStateExpired::newInstance()->complete(activity);
+
+    /* Runs again before the unlock was confirmed. */
+    PowerManager::getInstance().requestBeginPowerActivity(activity);
+
+    ASSERT_EQ(3u, power->sent.size());
+    EXPECT_EQ("start", power->sent[0]);
+    EXPECT_EQ("end", power->sent[1]);
+    EXPECT_EQ("start", power->sent[2]);
+    EXPECT_TRUE(listsPoweredActivities());
+
+    PowerManager::getInstance().releasePowerActivity(activity);
+    EXPECT_FALSE(listsPoweredActivities());
+}
